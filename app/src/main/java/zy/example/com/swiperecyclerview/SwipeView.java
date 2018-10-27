@@ -32,6 +32,9 @@ public class SwipeView extends ViewGroup {
     private static final int Header = -1;
     private static final int ContentView = 0;
     private static final int Footer = 1;
+//    是否显示header/footer
+    private boolean headerVisible;
+    private boolean footerVisible;
     //  控件view
     private View header;
     private TextView tvTime;
@@ -63,6 +66,8 @@ public class SwipeView extends ViewGroup {
         int viewType = ta.getInt(R.styleable.SwipeView_view_type, 0);
         int headerLayout = ta.getResourceId(R.styleable.SwipeView_header_layout, 0);
         int footerLayout = ta.getResourceId(R.styleable.SwipeView_footer_layout, 0);
+        headerVisible=ta.getBoolean(R.styleable.SwipeView_header_visible,true);
+        footerVisible=ta.getBoolean(R.styleable.SwipeView_footer_visible,true);
         ta.recycle();
 
         mSlop = ViewConfiguration.get(context).getScaledTouchSlop();
@@ -165,18 +170,20 @@ public class SwipeView extends ViewGroup {
                         LinearLayoutManager manager = (LinearLayoutManager) ((RecyclerView) contentView).getLayoutManager();
                         if (manager != null) {
 //                       判断滑动到顶端,开始下拉
-                            if (manager.findFirstCompletelyVisibleItemPosition() == 0 && distance < 0) {
+                            if (headerVisible&&manager.findFirstCompletelyVisibleItemPosition() == 0 && distance < 0) {
                                 return true;
                             }
 //                     判断滑动到底端,开始上拉
-                            if ((manager.findLastCompletelyVisibleItemPosition() + 1) == Objects.requireNonNull(((RecyclerView) contentView).getAdapter()).getItemCount() && distance > 0) {
+                            if (footerVisible&&(manager.findLastCompletelyVisibleItemPosition() + 1) == Objects.requireNonNull(((RecyclerView) contentView).getAdapter()).getItemCount() && distance > 0) {
                                 return true;
                             }
 //                       只要当前显示了header/footer,就拦截事件
-                                if (footerRefreshCompleted || headerRefreshCompleted) {
-                                    Log.i(TAG, "onInterceptTouchEvent: headerRefreshCompleted" + headerRefreshCompleted);
-                                    return true;
-                                }
+                            if (headerRefreshCompleted&&headerVisible){
+                                return true;
+                            }
+                            if (footerRefreshCompleted&&footerVisible){
+                                return true;
+                            }
                         }
                     }
                     if (contentView instanceof ListView) {

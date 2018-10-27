@@ -190,16 +190,18 @@ public class SwipeView extends ViewGroup {
                         ArrayAdapter manager = (ArrayAdapter) ((ListView) contentView).getAdapter();
                         if (manager != null) {
 //                       判断滑动到顶端,开始下拉
-                            if (((ListView) contentView).getFirstVisiblePosition() == 0 && distance < 0) {
+                            if (headerVisible&&((ListView) contentView).getFirstVisiblePosition() == 0 && distance < 0) {
                                 return true;
                             }
 //                     判断滑动到底端,开始上拉
-                            if ((((ListView) contentView).getLastVisiblePosition() + 1) == Objects.requireNonNull(((ListView) contentView).getCount()) && distance > 0) {
+                            if (footerRefreshCompleted&&(((ListView) contentView).getLastVisiblePosition() + 1) == Objects.requireNonNull(((ListView) contentView).getCount()) && distance > 0) {
                                 return true;
                             }
 //                       只要当前显示了header/footer,就拦截事件
-                            if (footerRefreshCompleted || headerRefreshCompleted) {
-                                Log.i(TAG, "onInterceptTouchEvent: headerRefreshCompleted" + headerRefreshCompleted);
+                            if (headerRefreshCompleted&&headerVisible){
+                                return true;
+                            }
+                            if (footerRefreshCompleted&&footerVisible){
                                 return true;
                             }
                         }

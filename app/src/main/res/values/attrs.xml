@@ -6,6 +6,7 @@
         <!--指定自己的header/footer布局-->
         <attr name="header_layout" format="reference"/>
         <attr name="footer_layout" format="reference"/>
+        <!--可以自行控制需要显示header/还是footer-->
         <attr name="header_visible" format="boolean"/>
         <attr name="footer_visible" format="boolean"/>
     </declare-styleable>

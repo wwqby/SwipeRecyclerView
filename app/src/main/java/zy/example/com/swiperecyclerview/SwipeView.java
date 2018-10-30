@@ -28,7 +28,7 @@ import java.util.Objects;
  */
 public class SwipeView extends ViewGroup {
     //  标记tag
-    private static final String TAG = "NewRecyclerView";
+    private static final String TAG = "SwipeView";
     private static final int Header = -1;
     private static final int ContentView = 0;
     private static final int Footer = 1;
@@ -231,7 +231,7 @@ public class SwipeView extends ViewGroup {
 //                        a要上拉显示footer,超过角标的autoScrollRange就自动下拉显示
                         if (!footerRefreshCompleted && getScrollY() >= footerHeight * autoScrollRange) {
                             Log.i(TAG, "onTouchEvent: 自动上拉");
-                            mScroller.startScroll(getScrollX(), getScrollY(), 0, footerHeight - getScrollY());
+                            mScroller.startScroll(getScrollX(), getScrollY(), 0, footerHeight - getScrollY(),500);
                             footerRefreshCompleted = true;
                             if (mListener != null) {
                                 mListener.footerRefreshStart(footer, contentView);
@@ -259,7 +259,7 @@ public class SwipeView extends ViewGroup {
 //                  a判定下拉显示header,超过角标的autoScrollRange就自动下拉显示
                         if (!headerRefreshCompleted && getScrollY() <= -headerHeight * autoScrollRange) {
                             Log.i(TAG, "onTouchEvent: 自动下拉");
-                            mScroller.startScroll(getScrollX(), getScrollY(), 0, -headerHeight - getScrollY());
+                            mScroller.startScroll(getScrollX(), getScrollY(), 0, -headerHeight - getScrollY(),500);
                             headerRefreshCompleted = true;
                             headerRefreshStart();
                         }
@@ -286,17 +286,19 @@ public class SwipeView extends ViewGroup {
                 }
 //                如果移动范围超过视图底端范围,那么在手指抬起时,返回到视图最底端
                 if (getScrollY() > footerHeight) {
-                    mScroller.startScroll(getScrollX(), getScrollY(), 0, footerHeight - getScrollY());
+                    mScroller.startScroll(getScrollX(), getScrollY(), 0, footerHeight - getScrollY(),500);
                 }
 //                如果在视图范围内,手指抬起时,没有触发自动显示header/footer,就自动隐藏
                 if (getScrollY() >= -headerHeight && getScrollY() <= footerHeight) {
 //                    自动隐藏header
-                    if (!headerRefreshCompleted && getScrollY() > -headerHeight * autoScrollRange) {
-                        mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
+                    if (!headerRefreshCompleted && getScrollY() > -headerHeight * autoScrollRange&&getScaleY()<0) {
+                        Log.i(TAG, "onTouchEvent: 自动隐藏header");
+                        mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY(),500);
                     }
 //                    自动隐藏footer
-                    if (!footerRefreshCompleted && getScrollY() < footerHeight * autoScrollRange) {
-                        mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
+                    if (!footerRefreshCompleted && getScrollY() < footerHeight * autoScrollRange&&getScrollY()>0) {
+                        Log.i(TAG, "onTouchEvent: 自动隐藏footer");
+                        mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY(),500);
                     }
                 }
                 invalidate();
@@ -324,12 +326,14 @@ public class SwipeView extends ViewGroup {
     }
 
     public void onHeaderRefreshCompleted() {
+        Log.i(TAG, "onHeaderRefreshCompleted: 手动隐藏header");
         headerRefreshCompleted = false;
         mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
         invalidate();
     }
 
     public void onFooterRefreshCompleted() {
+        Log.i(TAG, "onFooterRefreshCompleted: 手动隐藏footer");
         footerRefreshCompleted = false;
         mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
         invalidate();

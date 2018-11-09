@@ -326,17 +326,23 @@ public class SwipeView extends ViewGroup {
     }
 
     public void onHeaderRefreshCompleted() {
-        Log.i(TAG, "onHeaderRefreshCompleted: 手动隐藏header");
-        headerRefreshCompleted = false;
-        mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
-        invalidate();
+        if (getScrollY()!=0) {
+            Log.i(TAG, "onHeaderRefreshCompleted: 手动隐藏header");
+            headerRefreshCompleted = false;
+            mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
+            invalidate();
+        }
+
     }
 
     public void onFooterRefreshCompleted() {
-        Log.i(TAG, "onFooterRefreshCompleted: 手动隐藏footer");
-        footerRefreshCompleted = false;
-        mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
-        invalidate();
+        if (getScrollY()!=0){
+            Log.i(TAG, "onFooterRefreshCompleted: 手动隐藏footer");
+            footerRefreshCompleted = false;
+            mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
+            invalidate();
+        }
+
     }
 
 
@@ -365,6 +371,13 @@ public class SwipeView extends ViewGroup {
         return header;
     }
 
+    public void setFooterVisible(boolean footerVisible){
+        this.footerVisible=footerVisible;
+    }
+
+    public void setHeaderVisible(boolean headerVisible){
+        this.headerVisible=headerVisible;
+    }
 
     public interface NewClickListener {
         void footerRefreshStart(View footer, View contentView);

@@ -19,6 +19,7 @@ import android.widget.Scroller;
 import android.widget.TextView;
 
 import java.util.Calendar;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -54,6 +55,7 @@ public class SwipeView extends ViewGroup {
     private boolean headerRefreshCompleted;
     //  实现header和footer内部逻辑的接口
     private NewClickListener mListener;
+    private int contentViewHeight;
 
 
     public SwipeView(Context context) {
@@ -145,6 +147,7 @@ public class SwipeView extends ViewGroup {
                     case ContentView:
                         mView.layout(0, 0, mWidth, mHeight);
                         height += mHeight;
+                        contentViewHeight=mHeight;
                         break;
                     case Footer:
                         mView.layout(0, height, mWidth, mHeight + height);
@@ -174,9 +177,14 @@ public class SwipeView extends ViewGroup {
                                 return true;
                             }
 //                     判断滑动到底端,开始上拉
-                            if (footerVisible&&(manager.findLastCompletelyVisibleItemPosition() + 1) == Objects.requireNonNull(((RecyclerView) contentView).getAdapter()).getItemCount() && distance > 0) {
+//                            满足条件，允许下拉、当前最后的条目视图就是列表的最后一个条目、最后一个条目不为空，且最后一个条目在页面底部
+                            RecyclerView.Adapter adapter=((RecyclerView) contentView).getAdapter();
+                            int count=Objects.requireNonNull(adapter).getItemCount();
+                            View lastView=manager.findViewByPosition(count-1);
+                            if (footerVisible&&(manager.findLastCompletelyVisibleItemPosition() + 1) == count && distance > 0&&lastView!=null&&lastView.getBottom()==contentViewHeight) {
                                 return true;
                             }
+
 //                       只要当前显示了header/footer,就拦截事件
                             if (headerRefreshCompleted&&headerVisible){
                                 return true;
@@ -194,7 +202,11 @@ public class SwipeView extends ViewGroup {
                                 return true;
                             }
 //                     判断滑动到底端,开始上拉
-                            if (footerRefreshCompleted&&(((ListView) contentView).getLastVisiblePosition() + 1) == Objects.requireNonNull(((ListView) contentView).getCount()) && distance > 0) {
+//                            排除listView为空，和ListView显示未覆盖屏幕的情况
+                            ListView lvList=(ListView)contentView;
+                            int count=lvList.getCount();
+                            View lastView=lvList.getChildAt(count-lvList.getFirstVisiblePosition()-1);
+                            if (footerVisible&&(lvList.getLastVisiblePosition() + 1) ==count && distance > 0&&lastView!=null&&lastView.getBottom()==contentViewHeight) {
                                 return true;
                             }
 //                       只要当前显示了header/footer,就拦截事件
@@ -326,7 +338,7 @@ public class SwipeView extends ViewGroup {
     }
 
     public void onHeaderRefreshCompleted() {
-        if (getScrollY()!=0) {
+        if (getScrollY()<0) {
             Log.i(TAG, "onHeaderRefreshCompleted: 手动隐藏header");
             headerRefreshCompleted = false;
             mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
@@ -336,7 +348,7 @@ public class SwipeView extends ViewGroup {
     }
 
     public void onFooterRefreshCompleted() {
-        if (getScrollY()!=0){
+        if (getScrollY()>0){
             Log.i(TAG, "onFooterRefreshCompleted: 手动隐藏footer");
             footerRefreshCompleted = false;
             mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());

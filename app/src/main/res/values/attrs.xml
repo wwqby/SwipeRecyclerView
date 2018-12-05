@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <declare-styleable name="SwipeView">
-        <!--指定列表控件为ListView,-->
+        <!--控制header/footer自动关闭的速度-->
         <attr name="duration" format="integer"/>
         <!--指定自己的header/footer布局-->
         <attr name="header_layout" format="reference"/>

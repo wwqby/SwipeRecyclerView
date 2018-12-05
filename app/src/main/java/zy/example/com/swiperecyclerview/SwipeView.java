@@ -12,14 +12,11 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
 import android.widget.LinearLayout;
-import android.widget.ListView;
+import android.widget.ProgressBar;
 import android.widget.Scroller;
 import android.widget.TextView;
-
 import java.util.Calendar;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -33,29 +30,33 @@ public class SwipeView extends ViewGroup {
     private static final int Header = -1;
     private static final int ContentView = 0;
     private static final int Footer = 1;
-//    是否显示header/footer
+    //    是否显示header/footer
     private boolean headerVisible;
     private boolean footerVisible;
     //  控件view
     private View header;
     private TextView tvTime;
+    private TextView tvHeaderTitle;
+    private TextView tvFooterTitle;
+    private TextView tvNotice;
+    private ProgressBar headerProgressBar;
+    private ProgressBar footerProgressBar;
     private String lastTime;
-    private View contentView;
+    private RecyclerView contentView;
     private View footer;
     //  控件高度
     private int headerHeight;
     private int footerHeight;
+    private int contentViewHeight;
     //  滑动参数  lastY 上次触摸事件的高度  mScroller 滑动类  mSlop 系统最小滑动距离  autoScrollRange 启动自动滑动的系数
     private float lastY;
     private Scroller mScroller;
     private int mSlop;
-    private double autoScrollRange = 0.8;
-    //  滑动是否完成的标志
-    private boolean footerRefreshCompleted;
-    private boolean headerRefreshCompleted;
+    private int mDuration = 500;
     //  实现header和footer内部逻辑的接口
     private NewClickListener mListener;
-    private int contentViewHeight;
+    //  state 标记刷新过程中的状态 0 归位 1 拉动 2 释放 3刷新结束
+    private int state=0;
 
 
     public SwipeView(Context context) {
@@ -65,20 +66,22 @@ public class SwipeView extends ViewGroup {
     public SwipeView(Context context, AttributeSet attrs) {
         super(context, attrs);
         TypedArray ta = context.obtainStyledAttributes(attrs, R.styleable.SwipeView);
-        int viewType = ta.getInt(R.styleable.SwipeView_view_type, 0);
+        mDuration = ta.getInt(R.styleable.SwipeView_duration, 500);
         int headerLayout = ta.getResourceId(R.styleable.SwipeView_header_layout, 0);
         int footerLayout = ta.getResourceId(R.styleable.SwipeView_footer_layout, 0);
-        headerVisible=ta.getBoolean(R.styleable.SwipeView_header_visible,true);
-        footerVisible=ta.getBoolean(R.styleable.SwipeView_footer_visible,true);
+        headerVisible = ta.getBoolean(R.styleable.SwipeView_header_visible, true);
+        footerVisible = ta.getBoolean(R.styleable.SwipeView_footer_visible, true);
         ta.recycle();
 
         mSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         mScroller = new Scroller(context);
-        autoScrollRange = 0.6;
         switch (headerLayout) {
             case 0:
                 header = LayoutInflater.from(context).inflate(R.layout.item_header, this, false);
                 tvTime = header.findViewById(R.id.tv_time);
+                tvHeaderTitle=header.findViewById(R.id.tv_header_title);
+                tvNotice=header.findViewById(R.id.tv_notice);
+                headerProgressBar=header.findViewById(R.id.progressBar);
                 break;
             default:
                 header = LayoutInflater.from(context).inflate(headerLayout, this, false);
@@ -87,14 +90,7 @@ public class SwipeView extends ViewGroup {
         header.setTag(Header);
         addView(header);
 
-        switch (viewType) {
-            case 1:
-                contentView = new ListView(context);
-                break;
-            default:
-                contentView = new RecyclerView(context);
-                break;
-        }
+        contentView = new RecyclerView(context);
         contentView.setTag(ContentView);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
         addView(contentView, lp);
@@ -102,6 +98,8 @@ public class SwipeView extends ViewGroup {
         switch (footerLayout) {
             case 0:
                 footer = LayoutInflater.from(context).inflate(R.layout.item_footer, this, false);
+                tvFooterTitle=footer.findViewById(R.id.tv_footer_title);
+                footerProgressBar=footer.findViewById(R.id.progressBar);
                 break;
             default:
                 footer = LayoutInflater.from(context).inflate(footerLayout, this, false);
@@ -147,7 +145,8 @@ public class SwipeView extends ViewGroup {
                     case ContentView:
                         mView.layout(0, 0, mWidth, mHeight);
                         height += mHeight;
-                        contentViewHeight=mHeight;
+                        contentViewHeight = mHeight;
+                        Log.i(TAG, "onLayout: contentViewHeight=" + contentViewHeight);
                         break;
                     case Footer:
                         mView.layout(0, height, mWidth, mHeight + height);
@@ -159,7 +158,6 @@ public class SwipeView extends ViewGroup {
         }
     }
 
-
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
         switch (ev.getAction()) {
@@ -168,55 +166,28 @@ public class SwipeView extends ViewGroup {
                 break;
             case MotionEvent.ACTION_MOVE:
                 int distance = (int) (lastY - ev.getRawY());
-                if (Math.abs(distance) > mSlop) {
-                    if (contentView instanceof RecyclerView) {
-                        LinearLayoutManager manager = (LinearLayoutManager) ((RecyclerView) contentView).getLayoutManager();
-                        if (manager != null) {
-//                       判断滑动到顶端,开始下拉
-                            if (headerVisible&&manager.findFirstCompletelyVisibleItemPosition() == 0 && distance < 0) {
-                                return true;
-                            }
+                LinearLayoutManager manager = (LinearLayoutManager) ( contentView).getLayoutManager();
+                if (Math.abs(distance)>mSlop){
+                    if (manager != null) {
+                        if (headerVisible && manager.findFirstCompletelyVisibleItemPosition() == 0 && distance < 0) {
+                            return true;
+                        }
 //                     判断滑动到底端,开始上拉
-//                            满足条件，允许下拉、当前最后的条目视图就是列表的最后一个条目、最后一个条目不为空，且最后一个条目在页面底部
-                            RecyclerView.Adapter adapter=((RecyclerView) contentView).getAdapter();
-                            int count=Objects.requireNonNull(adapter).getItemCount();
-                            View lastView=manager.findViewByPosition(count-1);
-                            if (footerVisible&&(manager.findLastCompletelyVisibleItemPosition() + 1) == count && distance > 0&&lastView!=null&&lastView.getBottom()==contentViewHeight) {
-                                return true;
-                            }
-
-//                       只要当前显示了header/footer,就拦截事件
-                            if (headerRefreshCompleted&&headerVisible){
-                                return true;
-                            }
-                            if (footerRefreshCompleted&&footerVisible){
-                                return true;
-                            }
+//                     满足条件，允许下拉、当前最后的条目视图就是列表的最后一个条目、最后一个条目不为空，且最后一个条目在页面底部
+                        RecyclerView.Adapter adapter = ( contentView).getAdapter();
+                        int count = Objects.requireNonNull(adapter).getItemCount();
+                        View lastView = manager.findViewByPosition(count - 1);
+                        if (footerVisible && (manager.findLastCompletelyVisibleItemPosition() + 1) == count && distance > 0 && lastView != null && lastView.getBottom() == contentViewHeight) {
+                            return true;
                         }
                     }
-                    if (contentView instanceof ListView) {
-                        ArrayAdapter manager = (ArrayAdapter) ((ListView) contentView).getAdapter();
-                        if (manager != null) {
-//                       判断滑动到顶端,开始下拉
-                            if (headerVisible&&((ListView) contentView).getFirstVisiblePosition() == 0 && distance < 0) {
-                                return true;
-                            }
-//                     判断滑动到底端,开始上拉
-//                            排除listView为空，和ListView显示未覆盖屏幕的情况
-                            ListView lvList=(ListView)contentView;
-                            int count=lvList.getCount();
-                            View lastView=lvList.getChildAt(count-lvList.getFirstVisiblePosition()-1);
-                            if (footerVisible&&(lvList.getLastVisiblePosition() + 1) ==count && distance > 0&&lastView!=null&&lastView.getBottom()==contentViewHeight) {
-                                return true;
-                            }
+
 //                       只要当前显示了header/footer,就拦截事件
-                            if (headerRefreshCompleted&&headerVisible){
-                                return true;
-                            }
-                            if (footerRefreshCompleted&&footerVisible){
-                                return true;
-                            }
-                        }
+                    if (getScrollY() < 0 && headerVisible) {
+                        return true;
+                    }
+                    if (getScrollY() > 0 && footerVisible) {
+                        return true;
                     }
                 }
                 break;
@@ -226,103 +197,138 @@ public class SwipeView extends ViewGroup {
         return super.onInterceptTouchEvent(ev);
     }
 
-
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        float distance = lastY - event.getRawY();
         switch (event.getAction()) {
             case MotionEvent.ACTION_MOVE:
+                int distance = (int) (lastY - event.getRawY());
                 lastY = event.getRawY();
-//                默认可滑动,在move中处理视图内滑动事件,在up中处理视图外滑动事件
-                scrollBy(0, (int) distance);
-//                在视图内滑动处理
-                if (getScrollY() >= -headerHeight && getScrollY() <= footerHeight) {
-//                向上滑动,a想要上拉显示footer,b想要上拉取消header
-                    if (distance > 0) {
-//                        a要上拉显示footer,超过角标的autoScrollRange就自动下拉显示
-                        if (!footerRefreshCompleted && getScrollY() >= footerHeight * autoScrollRange) {
-                            Log.i(TAG, "onTouchEvent: 自动上拉");
-                            mScroller.startScroll(getScrollX(), getScrollY(), 0, footerHeight - getScrollY(),500);
-                            footerRefreshCompleted = true;
-                            if (mListener != null) {
-                                mListener.footerRefreshStart(footer, contentView);
-                            } else {
-                                Log.e(TAG, "onTouchEvent: mListener=null");
-                            }
-                        }
-//                      b想要上拉取消header,超过角标的autoScrollRange就自动下拉显示
-                        if (headerRefreshCompleted && getScrollY() < 0) {
-                            Log.i(TAG, "onTouchEvent: 取消下拉");
-                            mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY(), 1000);
-                            headerRefreshCompleted = false;
-                            if (mListener != null) {
-                                mListener.headerRefreshCancel();
-                            } else {
-                                Log.e(TAG, "onTouchEvent: mListener=null");
-                            }
-
-                        }
-
-                    }
-//                    向下滑动,a想要下拉显示header,b想要下拉取消footer
-                    if (distance < 0) {
-
-//                  a判定下拉显示header,超过角标的autoScrollRange就自动下拉显示
-                        if (!headerRefreshCompleted && getScrollY() <= -headerHeight * autoScrollRange) {
-                            Log.i(TAG, "onTouchEvent: 自动下拉");
-                            mScroller.startScroll(getScrollX(), getScrollY(), 0, -headerHeight - getScrollY(),500);
-                            headerRefreshCompleted = true;
-                            headerRefreshStart();
-                        }
-
-//                  b判定想要上拉,取消上拉footer,超过角标的autoScrollRange就自动取消下拉footer
-                        if (footerRefreshCompleted && getScrollY() > 0) {
-                            Log.i(TAG, "onTouchEvent: 取消上拉");
-                            mScroller.startScroll(getScrollX(), getScrollY(), 0, -footerHeight, 1000);
-                            footerRefreshCompleted = false;
-                            if (mListener != null) {
-                                mListener.footerRefreshCancel();
-                            } else {
-                                Log.e(TAG, "onTouchEvent: mListener=null");
-                            }
-                        }
-                    }
+//                当上拉即将关闭footer露出header时，中断滑动
+                if (distance > 0 && (getScrollY() + distance) > 0 && getScrollY() < 0) {
+                    mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY(), mDuration);
+                    invalidate();
+//                 当下拉即将关闭header露出footer时，中断滑动
+                } else if (distance < 0 && (getScrollY() + distance) < 0 && getScrollY() > 0) {
+                    mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY(), mDuration);
+                    invalidate();
+                } else {
+                    scrollBy(0, distance / 2);
                 }
-                invalidate();
+//                更新刷新状态
+                if (getScrollY()>-headerHeight&&getScrollY()<footerHeight){
+                    if (state==0){
+                        state=1;
+                    }
+                }else {
+                    state=2;
+                }
+                updateView();
                 break;
             case MotionEvent.ACTION_UP:
-//                如果移动范围超过视图顶端范围,那么在手指抬起时,返回到视图最顶端
+                lastY = event.getRawY();
+//                如果移动范围超过视图顶端范围,那么在手指抬起时,返回到视图最顶端,此时开始刷新header
                 if (getScrollY() < -headerHeight) {
-                    mScroller.startScroll(getScrollX(), getScrollY(), 0, -headerHeight - getScrollY(), 500);
+                    mScroller.startScroll(getScrollX(), getScrollY(), 0, -headerHeight - getScrollY(), mDuration);
+                    headerRefreshStart();
                 }
-//                如果移动范围超过视图底端范围,那么在手指抬起时,返回到视图最底端
+//                如果移动范围超过视图底端范围,那么在手指抬起时,返回到视图最底端，此时开始刷新footer
                 if (getScrollY() > footerHeight) {
-                    mScroller.startScroll(getScrollX(), getScrollY(), 0, footerHeight - getScrollY(),500);
+                    mScroller.startScroll(getScrollX(), getScrollY(), 0, footerHeight - getScrollY(), mDuration);
+                    if (mListener != null) {
+                        mListener.footerRefreshStart(this);
+                    } else {
+                        Log.e(TAG, "onTouchEvent: mListener=null");
+                    }
                 }
-//                如果在视图范围内,手指抬起时,没有触发自动显示header/footer,就自动隐藏
                 if (getScrollY() >= -headerHeight && getScrollY() <= footerHeight) {
 //                    自动隐藏header
-                    if (!headerRefreshCompleted && getScrollY() > -headerHeight * autoScrollRange&&getScaleY()<0) {
+                    if (getScrollY() > -headerHeight && getScrollY() < 0) {
                         Log.i(TAG, "onTouchEvent: 自动隐藏header");
-                        mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY(),500);
+                        mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY(), mDuration);
+                        if (mListener != null) {
+                            mListener.headerRefreshCancel();
+                        } else {
+                            Log.e(TAG, "onTouchEvent: mListener=null");
+                        }
                     }
 //                    自动隐藏footer
-                    if (!footerRefreshCompleted && getScrollY() < footerHeight * autoScrollRange&&getScrollY()>0) {
+                    if (getScrollY() < footerHeight && getScrollY() > 0) {
                         Log.i(TAG, "onTouchEvent: 自动隐藏footer");
-                        mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY(),500);
+                        mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY(), mDuration);
+                        if (mListener != null) {
+                            mListener.footerRefreshCancel();
+                        } else {
+                            Log.e(TAG, "onTouchEvent: mListener=null");
+                        }
                     }
                 }
                 invalidate();
+                state=0;
+                updateView();
                 break;
-
         }
         return super.onTouchEvent(event);
     }
 
+//    更新header/footer的状态
+    private void updateView() {
+        if (getScrollY()<0){
+            updateHeader();
+        }
+        if (getScrollY()>0){
+            updateFooter();
+        }
+    }
+
+    private void updateFooter() {
+        switch (state){
+            //开始刷新、刷新完毕
+            case 0:
+                tvFooterTitle.setText("正在刷新");
+                footerProgressBar.setVisibility(VISIBLE);
+                break;
+                //拉取
+            case 1:
+                tvFooterTitle.setText("拉取开始刷新");
+                footerProgressBar.setVisibility(GONE);
+                break;
+            //释放并刷新
+            case 2:
+                tvFooterTitle.setText("释放并刷新");
+                break;
+        }
+    }
+
+    private void updateHeader() {
+        switch (state){
+            //开始刷新、刷新完毕
+            case 0:
+                tvHeaderTitle.setText("正在刷新");
+                headerProgressBar.setVisibility(VISIBLE);
+                break;
+                //拉取
+            case 1:
+                tvHeaderTitle.setText("拉取开始刷新");
+                headerProgressBar.setVisibility(GONE);
+
+                if (lastTime==null){
+                    tvNotice.setText("刚刚更新");
+                }else{
+                    tvNotice.setText("最近更新");
+                }
+                break;
+            //释放并刷新
+            case 2:
+                tvHeaderTitle.setText("释放并刷新");
+                break;
+        }
+    }
+
+
     private void headerRefreshStart() {
         if (mListener != null) {
-            mListener.headerRefreshStart(header, contentView);
+            mListener.headerRefreshStart(this);
         } else {
             Log.e(TAG, "onTouchEvent: mListener=null");
         }
@@ -338,9 +344,8 @@ public class SwipeView extends ViewGroup {
     }
 
     public void onHeaderRefreshCompleted() {
-        if (getScrollY()<0) {
+        if (getScrollY() < 0) {
             Log.i(TAG, "onHeaderRefreshCompleted: 手动隐藏header");
-            headerRefreshCompleted = false;
             mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
             invalidate();
         }
@@ -348,9 +353,8 @@ public class SwipeView extends ViewGroup {
     }
 
     public void onFooterRefreshCompleted() {
-        if (getScrollY()>0){
+        if (getScrollY() > 0) {
             Log.i(TAG, "onFooterRefreshCompleted: 手动隐藏footer");
-            footerRefreshCompleted = false;
             mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
             invalidate();
         }
@@ -371,7 +375,11 @@ public class SwipeView extends ViewGroup {
         this.mListener = listener;
     }
 
-    public View getContentView() {
+    public void setmDuration(int millionSeconds){
+        this.mDuration=millionSeconds;
+    }
+
+    public RecyclerView getContentView() {
         return contentView;
     }
 
@@ -383,18 +391,18 @@ public class SwipeView extends ViewGroup {
         return header;
     }
 
-    public void setFooterVisible(boolean footerVisible){
-        this.footerVisible=footerVisible;
+    public void setFooterVisible(boolean footerVisible) {
+        this.footerVisible = footerVisible;
     }
 
-    public void setHeaderVisible(boolean headerVisible){
-        this.headerVisible=headerVisible;
+    public void setHeaderVisible(boolean headerVisible) {
+        this.headerVisible = headerVisible;
     }
 
     public interface NewClickListener {
-        void footerRefreshStart(View footer, View contentView);
+        void footerRefreshStart(SwipeView swipeView);
 
-        void headerRefreshStart(View header, View contentView);
+        void headerRefreshStart(SwipeView swipeView);
 
         void footerRefreshCancel();
 

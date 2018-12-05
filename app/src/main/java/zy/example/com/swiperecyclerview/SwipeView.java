@@ -3,6 +3,7 @@ package zy.example.com.swiperecyclerview;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.os.Handler;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.util.AttributeSet;
@@ -230,16 +231,22 @@ public class SwipeView extends ViewGroup {
 //                如果移动范围超过视图顶端范围,那么在手指抬起时,返回到视图最顶端,此时开始刷新header
                 if (getScrollY() < -headerHeight) {
                     mScroller.startScroll(getScrollX(), getScrollY(), 0, -headerHeight - getScrollY(), mDuration);
-                    headerRefreshStart();
+                    new Handler().postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            headerRefreshStart();
+                        }
+                    },mDuration);
                 }
 //                如果移动范围超过视图底端范围,那么在手指抬起时,返回到视图最底端，此时开始刷新footer
                 if (getScrollY() > footerHeight) {
                     mScroller.startScroll(getScrollX(), getScrollY(), 0, footerHeight - getScrollY(), mDuration);
-                    if (mListener != null) {
-                        mListener.footerRefreshStart(this);
-                    } else {
-                        Log.e(TAG, "onTouchEvent: mListener=null");
-                    }
+                    new Handler().postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            footerRefreshStart();
+                        }
+                    },mDuration);
                 }
                 if (getScrollY() >= -headerHeight && getScrollY() <= footerHeight) {
 //                    自动隐藏header
@@ -269,6 +276,14 @@ public class SwipeView extends ViewGroup {
                 break;
         }
         return super.onTouchEvent(event);
+    }
+
+    private void footerRefreshStart() {
+        if (mListener != null) {
+            mListener.footerRefreshStart(this);
+        } else {
+            Log.e(TAG, "onTouchEvent: mListener=null");
+        }
     }
 
 //    更新header/footer的状态
@@ -346,7 +361,7 @@ public class SwipeView extends ViewGroup {
     public void onHeaderRefreshCompleted() {
         if (getScrollY() < 0) {
             Log.i(TAG, "onHeaderRefreshCompleted: 手动隐藏header");
-            mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
+            mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY(),mDuration);
             invalidate();
         }
 
@@ -355,7 +370,7 @@ public class SwipeView extends ViewGroup {
     public void onFooterRefreshCompleted() {
         if (getScrollY() > 0) {
             Log.i(TAG, "onFooterRefreshCompleted: 手动隐藏footer");
-            mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY());
+            mScroller.startScroll(getScrollX(), getScrollY(), 0, -getScrollY(),mDuration);
             invalidate();
         }
 
